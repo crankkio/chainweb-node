@@ -71,6 +71,7 @@ module Chainweb.Pact5.Backend.ChainwebPactDb
     , convRowKey
     , commitBlockStateToDatabase
     , initSchema
+    , getUserTableRecordCount
     ) where
 
 import Chainweb.BlockHash
@@ -876,3 +877,66 @@ getSerialiser = do
     cid <- view blockHandlerChainId
     blockHeight <- view blockHandlerBlockHeight
     return $ pact5Serialiser version cid blockHeight
+
+getUserTableRecordCount 
+    :: SQLiteEnv 
+    -> ChainwebVersion 
+    -> ChainId 
+    -> BlockHeight 
+    -> Pact.TxId
+    -> Pact.TableName 
+    -> IO Int
+getUserTableRecordCount db version chainId blockHeight txIdUpperBound tableName = do
+    let env = BlockHandlerEnv
+            { _blockHandlerDb = db
+            , _blockHandlerLogger = ()
+            , _blockHandlerVersion = version
+            , _blockHandlerBlockHeight = blockHeight
+            , _blockHandlerUpperBoundTxId = txIdUpperBound
+            , _blockHandlerChainId = chainId
+            , _blockHandlerMode = Pact.Transactional
+            , _blockHandlerAtTip = True
+            }
+    
+    blockHandle <- newEmptyBlockHandle
+    let blockState = BlockState blockHandle (SQLitePendingData InMemDb.emptyStore HashSet.empty HashSet.empty) Nothing
+    
+    result <- runExceptT $ runReaderT (evalStateT (runReaderT (runBlockHandler countRecords) env) blockState) Pact.zeroGasEnv
+    case result of
+        Left _ -> return 0  -- Return 0 on error (e.g., table doesn't exist)
+        Right count -> return count
+  where
+    newEmptyBlockHandle :: IO (BlockHandle Pact5)
+    newEmptyBlockHandle = do
+        let emptyPending = SQLitePendingData InMemDb.emptyStore HashSet.empty HashSet.empty
+        return $ BlockHandle (Pact.TxId 0) emptyPending
+    
+    countRecords :: BlockHandler () Int
+    countRecords = do
+        tableStatus <- checkTableStatus tableName
+        case tableStatus of
+            TableDoesNotExist -> return 0
+            TableCreationPending -> return 0
+            TableExists -> do
+                -- Count records in the database
+                dbCount <- throwOnDbError $ countDbRecords
+                
+                -- Count records in pending writes
+                pendingStore <- use (bsPendingTxWrites . pendingWrites)
+                let pendingCount = length $ InMemDb.keys (Pact.DUserTables tableName) pendingStore
+                
+                return $ dbCount + pendingCount
+      where
+        countDbRecords :: ExceptT SQ3.Error (BlockHandler ()) Int
+        countDbRecords = do
+            Pact.TxId txIdUpperBoundWord64 <- view blockHandlerUpperBoundTxId
+            db' <- view blockHandlerDb
+            let tablename = domainTableName (Pact.DUserTables tableName)
+            let countStmt = 
+                  "SELECT COUNT(DISTINCT rowkey) FROM " <> tbl tablename <> 
+                  " WHERE txid < ?;"
+            result <- mapExceptT liftIO $
+                qry db' countStmt [SInt (fromIntegral txIdUpperBoundWord64)] [RInt]
+            case result of
+                [[SInt count]] -> return $ fromIntegral count
+                _ -> internalDbError "countDbRecords: Expected a single count result"
