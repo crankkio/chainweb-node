@@ -902,7 +902,7 @@ getUserTableRecordCount db version chainId blockHeight txIdUpperBound tableName 
     let blockState = BlockState blockHandle (emptySQLitePendingData InMemDb.empty) Nothing
     
     gasEnv <- Pact.mkTableGasEnv (Pact.MilliGasLimit mempty) Pact.GasLogsDisabled
-    result <- runExceptT $ runReaderT (evalStateT (runReaderT (runBlockHandler countRecords) env) blockState) gasEnv
+    result <- runExceptT $ runReaderT (Pact.runGasM (evalStateT (runReaderT (runBlockHandler countRecords) env) blockState)) gasEnv
     case result of
         Left _ -> return 0  -- Return 0 on error (e.g., table doesn't exist)
         Right count -> return count
