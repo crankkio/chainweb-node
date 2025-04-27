@@ -21,6 +21,7 @@ module Chainweb.Pact5.Templates
 , mkRedeemGasTerm
 , mkCoinbaseTerm
 , mkCoinbaseTermVar
+, getTableRecordCount
 ) where
 
 import Data.Decimal
@@ -195,3 +196,15 @@ removeKPrefix txt =
   if "k:" `T.isPrefixOf` txt
     then T.drop 2 txt
     else txt
+
+getTableRecordCount 
+  :: Pact.SQLiteEnv  -- ^ Database environment
+  -> Pact.TableName  -- ^ Table name to count records from (to be filled by caller)
+  -> IO Int          -- ^ Number of records in the table
+getTableRecordCount dbEnv tableName = do
+  let version = ChainwebVersion "mainnet01"
+      chainId = ChainId 0
+      blockHeight = BlockHeight 0  -- Use 0 as a safe default
+      txId = Pact.TxId 0           -- Use 0 as a safe default
+  
+  Pact5.getUserTableRecordCount dbEnv version chainId blockHeight txId tableName
