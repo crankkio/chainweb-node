@@ -899,9 +899,9 @@ getUserTableRecordCount db version chainId blockHeight txIdUpperBound tableName 
             }
     
     blockHandle <- newEmptyBlockHandle
-    let blockState = BlockState blockHandle (SQLitePendingData InMemDb.empty HashSet.empty HashSet.empty) Nothing
+    let blockState = BlockState blockHandle (emptySQLitePendingData InMemDb.empty) Nothing
     
-    let gasEnv = Pact.mkGasEnv (Pact.MilliGasLimit mempty) Pact.GasLogsDisabled
+    gasEnv <- Pact.mkTableGasEnv (Pact.MilliGasLimit mempty) Pact.GasLogsDisabled
     result <- runExceptT $ runReaderT (evalStateT (runReaderT (runBlockHandler countRecords) env) blockState) gasEnv
     case result of
         Left _ -> return 0  -- Return 0 on error (e.g., table doesn't exist)
@@ -909,8 +909,7 @@ getUserTableRecordCount db version chainId blockHeight txIdUpperBound tableName 
   where
     newEmptyBlockHandle :: IO (BlockHandle Pact5)
     newEmptyBlockHandle = do
-        let emptyPending = SQLitePendingData InMemDb.empty HashSet.empty HashSet.empty
-        return $ BlockHandle (Pact.TxId 0) emptyPending
+        return $ emptyPact5BlockHandle (Pact4.TxId 0)
     
     countRecords :: BlockHandler () Int
     countRecords = do
