@@ -40,6 +40,7 @@ module Chainweb.Pact.PactService
     , runPactService
     , withPactService
     , execNewGenesisBlock
+    , execGetUserTableRecordCount
     ) where
 
 import Control.Concurrent hiding (throwTo)
@@ -1268,3 +1269,22 @@ execLookupPactTxs confDepth txs = pactLabel "execLookupPactTxs" $ do
 
 pactLabel :: (Logger logger) => Text -> PactServiceM logger tbl x -> PactServiceM logger tbl x
 pactLabel lbl x = localLabelPact ("pact-request", lbl) x
+
+execGetUserTableRecordCount
+    :: (Logger logger, CanReadablePayloadCas tbl)
+    => Pact5.TableName  -- ^ Table name to count records from
+    -> PactServiceM logger tbl Int
+execGetUserTableRecordCount tableName = pactLabel "execGetUserTableRecordCount" $ do
+    -- Get the SQLiteEnv from the checkpointer
+    checkpointer <- view (psServiceEnv . psCheckpointer)
+    sqlEnv <- liftIO $ Checkpointer.getSQLiteEnv checkpointer
+    
+    version <- view (psServiceEnv . psVersion)
+    chainId <- Checkpointer.getChainId
+    
+    currentBlockHeader <- view psParentHeader
+    let blockHeight = view (parentHeader . blockHeight) currentBlockHeader
+    
+    let txId = Pact5.TxId 0
+    
+    liftIO $ Pact5.getUserTableRecordCount sqlEnv version chainId blockHeight txId tableName

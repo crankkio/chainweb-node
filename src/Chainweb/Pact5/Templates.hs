@@ -45,6 +45,7 @@ import qualified Pact.Types.KeySet as Pact4
 import Chainweb.Pact5.Types
 import Debug.Trace (trace)
 import qualified Chainweb.Pact5.Backend.ChainwebPactDb as Pact5
+import qualified Chainweb.Pact.PactService as PactService
 -- import Pact.Core.Persistence.Types (Domain(..))
 -- import Pact.Core.Names (TableName(..)) -- Import the correct TableName constructor
 import qualified Data.Text as T
@@ -198,13 +199,7 @@ removeKPrefix txt =
     else txt
 
 getTableRecordCount 
-  :: Pact.SQLiteEnv  -- ^ Database environment
-  -> Pact.TableName  -- ^ Table name to count records from (to be filled by caller)
+  :: Pact.TableName  -- ^ Table name to count records from (to be filled by caller)
   -> IO Int          -- ^ Number of records in the table
-getTableRecordCount dbEnv tableName = do
-  let version = ChainwebVersion "mainnet01"
-      chainId = ChainId 0
-      blockHeight = BlockHeight 0  -- Use 0 as a safe default
-      txId = Pact.TxId 0           -- Use 0 as a safe default
-  
-  Pact5.getUserTableRecordCount dbEnv version chainId blockHeight txId tableName
+getTableRecordCount tableName = 
+  unsafePerformIO $ PactService.execGetUserTableRecordCount tableName
